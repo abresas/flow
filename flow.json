@@ -1,0 +1,21 @@
+{
+    "project": "test",
+    "nodes": [ 
+        {
+           "name": "tail",
+           "command": "tail -f /var/log/apache2/access.log"
+        }, 
+        {
+            "name": "cat",
+            "command": "cat"
+        },
+        {
+           "name": "grep-favicon",
+           "command": "grep favicon --line-buffered"
+        } 
+    ],
+    "connections": [ {
+        "out": "tail",
+        "in": "cat"
+    } ]
+}
