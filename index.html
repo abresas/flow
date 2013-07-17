@@ -1,0 +1,246 @@
+<html>
+    <head>
+        <title>Flow-based programming environment</title>
+        <style>
+            #graph {
+                border: 1px solid black;
+            }
+            .node {
+                width: 100px;
+                height: 100px;
+                border: 1px solid black;
+                border-radius: 20px;
+                text-align: center;
+                position: absolute;
+            }
+
+            .node-title {
+                margin-top: 30px;
+            }
+        </style>
+    </head>
+    <body>
+        <canvas id="graph" width="1024" height="768" />
+        <script type="text/javascript" src="http://code.jquery.com/jquery-1.10.2.min.js"></script>
+        <script type="text/javascript">
+        Math.dist = function( x1, y1, x2, y2 ) {
+            return Math.sqrt( ( x1 - x2 ) * ( x1 - x2 ) + ( y1 - y2 ) * ( y1 - y2 ) );
+        };
+
+        var scene = {
+            init: function( canvas ) {
+                this.shapes = [];
+                this.canvas = canvas;
+                this.context = canvas.getContext( '2d' );
+                this.dragging = null;
+
+                canvas.addEventListener( 'mousedown', function( e ) { scene.onMouseDown( e ); } );
+                canvas.addEventListener( 'mousemove', function( e ) { scene.onMouseMove( e ); } );
+                canvas.addEventListener( 'mouseup', function( e ) { scene.onMouseUp( e ); } );
+                canvas.addEventListener( 'selectestart', function( e ) { e.preventDefault(); return false; }, false );
+            },
+            onMouseDown: function( e ) {
+                var parentOffset = $( canvas ).parent().offset();
+                var mouseX = e.pageX - parentOffset.left;
+                var mouseY = e.pageY - parentOffset.top;
+
+                var shape = this.shapeInPoint( mouseX, mouseY );
+                if ( this.selected ) {
+                    this.selected.onDeselected();
+                }
+                if ( shape ) {
+                    this.dragging = true;
+                    this.selected = shape;
+                    shape.onSelected();
+                    shape.onDragStart( mouseX, mouseY );
+                }
+            },
+            onMouseMove: function( e ) {
+                var parentOffset = $( canvas ).parent().offset();
+                var mouseX = e.pageX - parentOffset.left;
+                var mouseY = e.pageY - parentOffset.top;
+                if ( this.dragging ) {
+                    shape.onDragMove( mouseX, mouseY );
+                }
+            },
+            onMouseUp: function( e ) {
+                if ( this.dragging ) {
+                    this.dragging = false;
+                    shape.onDragEnd();
+                }
+            },
+            add: function( shape ) {
+                this.shapes.push( shape );
+            },
+            remove: function( shape ) {
+                delete this.shapes[ this.shapes.indexOf( shape ) ];
+            },
+            draw: function() {
+                for ( var i in this.shapes ) {
+                    var shape = this.shapes[ i ];
+                    if ( shape.form == 'circle' ) {
+                        this.context.fillStyle = shape.color;
+                        this.context.fillCircle( shape.x, shape.y, shape.radius );
+
+                        if ( shape.text ) {
+                            this.context.font = shape.fontSize + 'pt ' + shape.fontFamily;
+                            this.context.fillStyle = shape.textColor;
+                            this.context.textalign = 'center';
+                            this.context.fillText( shape.text, shape.x - ( shape.fontSize / 4 * shape.text.length ), shape.y + 3 );
+                        }
+                    }
+                }
+            }
+        };
+
+        var connection = {
+        };
+
+        var port = {
+        };
+
+        var node = {
+            init: function( data ) {
+                this.name = data.name;
+                this.running = data.running;
+                this.x = data.x;
+                this.y = data.y;
+                this.shape = Object.create( circle );
+                this.shape.move( x, y );
+                this.shape.fill( "#ff0000" );
+                this.shape.stroke( "#00ff00" );
+                this.shape.setCaption( this.name );
+                
+                var node = this;
+                this.shape.on( 'dragmove', function( x, y ) {
+                    node.x = x;
+                    node.y = y;
+                    this.shape.move( x, y );
+                    node.emit( 'moved', node.x, node.y );
+                } );
+                this.shape.on( 'selected', function() {
+                    this.shape.stroke( '#ff00ff' );
+                } );
+                this.shape.on( 'deselected', function() {
+                    this.shape.stroke( '#00ff00' );
+                } );
+            }
+        };
+
+        var graph = {
+            context: null,
+            nodes: {},
+            connections: [],
+            lastNode: null,
+            init: function( ctx, data ) {
+                this.context = ctx;
+                this.nodes = data.nodes;
+                this.connections = data.connections;
+            },
+            objectInPoint: function( x, y ) {
+                for ( var i in this.nodes ) {
+                    var node = this.nodes[ i];
+                    if ( Math.dist( x, y, node.x, node.y ) < node.radius ) {
+                        return node;
+                    }
+                }
+                return null;
+            },
+            draw: function() {
+                this.context.clearRect( 0, 0, 1024, 768 );
+                for ( i in this.nodes ) {
+                    var node = this.nodes[ i ];
+                    if ( !node.x ) {
+                        if ( !this.lastNode ) {
+                            node.x = 150;
+                        }
+                        else {
+                            console.log( this.lastNode );
+                            node.x = this.lastNode.x + 250;
+                        }
+                        node.y = 150;
+                        node.radius = 80;
+                        this.lastNode = node;
+                    }
+                    this.context.fillStyle = '#ff0000';
+                    this.context.fillCircle( node.x, node.y, node.radius );
+
+                    this.context.fillStyle = '#000000';
+                    this.context.fillCircle( node.x - node.radius, node.y, 5 );
+
+                    this.context.fillStyle = '#000000';
+                    this.context.fillCircle( node.x + node.radius, node.y, 5 );
+
+                    this.context.font = '10pt Helvetica';
+                    this.context.fillStyle = 'white';
+                    this.context.textalign = 'center';
+                    this.context.fillText( node.name, node.x - ( 3 * node.name.length ), node.y + 3 );
+                }
+                for ( i in this.connections ) {
+                    var connection = this.connections[ i ];
+                    var outNode = this.nodes[ connection.out ];
+                    var inNode = this.nodes[ connection.in ];
+                    this.context.lineWidth = "5";
+                    this.context.strokeStyle = '#0000ff';
+                    this.context.beginPath();
+                    this.context.moveTo( outNode.x + outNode.radius, outNode.y );
+                    this.context.lineTo( inNode.x - inNode.radius, inNode.y );
+                    this.context.stroke();
+                }
+            }
+        };
+        var api = {
+            init: function( callback ) {
+                $.get( '/api/graph', function( data ) {
+                    callback( data );
+                } );
+            }
+        };
+        $( document ).ready( function() {
+            var canvas = document.getElementById( 'graph' );
+            var ctx = canvas.getContext( '2d' );
+            ctx.fillCircle = function( centerx, centery, radius ) {
+                this.beginPath();
+                this.arc( centerx, centery, radius, 0, 2 * Math.PI, false );
+                this.closePath();
+                this.fill();
+            };
+            api.init( function( data ) {
+                graph.init( ctx, data );
+                setInterval( function() { graph.draw() }, 30 );
+                //graph.draw();
+            } );
+            canvas.addEventListener( 'mousedown', function( e ) {
+                var parentOffset = $( canvas ).parent().offset();
+                var mouseX = e.pageX - parentOffset.left;
+                var mouseY = e.pageY - parentOffset.top;
+                graph.selected = graph.objectInPoint( mouseX, mouseY );
+                if ( graph.selected ) {
+                    graph.dragOffX = mouseX - graph.selected.x;
+                    graph.dragOffY = mouseY - graph.selected.y;
+                    graph.dragging = true;
+                }
+            } );
+            canvas.addEventListener( 'mousemove', function( e ) {
+                var parentOffset = $( canvas ).parent().offset();
+                var mouseX = e.pageX - parentOffset.left;
+                var mouseY = e.pageY - parentOffset.top;
+                if ( graph.dragging ) {
+                    graph.selected.x = mouseX - graph.dragOffX;
+                    graph.selected.y = mouseY - graph.dragOffY;
+                }
+            } );
+            canvas.addEventListener( 'mouseup', function( e ) {
+                graph.dragging = false;
+            } );
+            canvas.addEventListener( 'selectstart', function( e ) {
+                e.preventDefault();
+                return false;
+            }, false );
+        } );
+        $.get( '/api/graph', function( data ) {
+            console.log( data );
+        } );
+        </script>
+    </body>
+</html>
